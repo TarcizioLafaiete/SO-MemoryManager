@@ -1,3 +1,2 @@
 # SO-MemoryManager
-Repositorio destinado para o TP2 da disciplina de Sistemas Operacionais da UFMG
-
+Repositorio destinado para o segundo trabalho prático da disciplina de Sistemas Operacionais da UFMG, segundo semestre de 2023
