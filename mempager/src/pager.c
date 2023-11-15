@@ -21,6 +21,11 @@ void pager_init(int nframes, int nblocks){
 
 void *pager_extend(pid_t pid){
 
+    return NULL;
+}
+
+void pager_create(pid_t pid){
+
 }
 
 void pager_fault(pid_t pid, void *addr){
