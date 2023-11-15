@@ -4,3 +4,5 @@
 .a
 #Ignore logs
 .log*
+#Ignore .vscode
+.vscode

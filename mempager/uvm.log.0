@@ -1,9 +1,0 @@
-uvm_create starting
-  connecting unix socket [mmu.sock]
-src/uvm.c:358: strerror: No such file or directory
-mmu.sock connection attempt 0/3 failed
-src/uvm.c:358: strerror: No such file or directory
-mmu.sock connection attempt 1/3 failed
-src/uvm.c:358: strerror: No such file or directory
-mmu.sock connection attempt 2/3 failed
-src/uvm.c:366: strerror: No such file or directory
