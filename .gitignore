@@ -1,0 +1,6 @@
+#Ignore .out
+.out
+#Ignore static libraries
+.a
+#Ignore logs
+.log*
