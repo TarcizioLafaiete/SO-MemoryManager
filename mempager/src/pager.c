@@ -125,7 +125,6 @@ void pager_fault(pid_t pid, void *addr){
 }
 
 int pager_syslog(pid_t pid, void *addr, size_t len){
-
     return 0;
 }
 
