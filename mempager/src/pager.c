@@ -20,11 +20,13 @@
  * @brief Estrutura utilizada para guardar informações úteis para o algoritmo de segunda chance.
  * @param in_frame Define se a página está presente na memória física
  * @param permission Define se a página permite leitura e/ou escrita por parte dos processos.
+ * @param reference_bit Bit utilizado no algoritmo de segunda chance para definir a pagina retirada da mêmoria.
  * 
  */
 typedef struct{
     short in_frame;
     short permission;
+    short reference_bit;
 } bits_array;
 
 /**
@@ -63,7 +65,17 @@ page_central frame;
  * 
  */
 page_central block;
-
+/**
+ * @brief Ponteiro de Segunda chance, sempre aponta para uma posição de mêmoria e procura por uma vítima.
+ * 
+ */
+int sc_ptr;
+/**
+ * @brief Contador de páginas novas, na mêmoria, toda vez que uma nova pagina entra na mêmoria principal ele é incrementado, toda vez que ele chega
+ * no tamanho da mêmoria principal ele é zerado, e indica que deve acontecer um processo de troca de permissão das páginas para PROT_NONE
+ * 
+ */
+int new_pages_counter;
 /**
  * @brief Inicializa as páginas presentes em "page_t" com valores iniciais quaisquer
  * 
@@ -245,11 +257,32 @@ int vm_list_check_extended_page(vm_list* list, pid_t pid, void* vaddr){
         curr = curr->next;
     }
     int alloc = VIRTUAL_ADDR_TO_INDEX(vaddr);
-    if(curr->data.pages[alloc] == 1){
-        curr->data.pages[alloc] = 2;
+    int alloced = curr->data.pages[alloc] & 0x03;
+    if(alloced == 1){
+        curr->data.pages[alloc] |= 0x02;
         return 1;
     }
     return 0;
+}
+/**
+ * @brief Recebe uma página de mêmoria e salva seus dados no gerenciador "manager". Salvo a permissão de page nos bits 3 e 4 do inteiro respectivo
+ * aquela pagina
+ * 
+ * @param list - Parâmetro global de gerenciamento de memória virtual "manager" 
+ * @param to_save - Pagina que se deseja salvar os dados na mêmoria
+ */
+void vm_list_save_page(vm_list* list, page to_save){
+    struct vm_node* curr = list->head;
+
+    while(curr != NULL && curr->data.pid != to_save.pid){
+        curr = curr->next;
+    }
+
+    int idx = VIRTUAL_ADDR_TO_INDEX(to_save.vaddr);
+    short permission = to_save.options.permission << 2;
+    curr->data.pages[idx] |= permission;
+    curr->data.pages[idx] &= 0xFD;
+
 }
 
 /**
@@ -278,10 +311,60 @@ void vm_list_remove_pid(vm_list* list, pid_t pid){
     
 }
 //------------------------------------ SENCOND CHANCE ALGORITHM --------------------------------------------------------
-
+/**
+ * @brief Procura na tabela de paginas presentes na mémoria principal por algum frame que possui o bit de referência como 0 para ser a proxima vitima
+ * do do paginador e ser retirado da memoria. A cada pagina que possui um bit 1 é dada uma segunda chance e seu bit é colocado como 0
+ * 
+ * @return int - Posicao relativa da pagína de mêmoria que deverá ser retirada da mêmoria.
+ */
 int second_chance(){
+    while(1){
+        if(sc_ptr == frame.size){
+            sc_ptr = 0;
+        }
 
+        if(frame.page_t[sc_ptr].options.reference_bit){
+            frame.page_t[sc_ptr].options.reference_bit = 0;
+            sc_ptr++;
+        }
+        else{
+            sc_ptr++;
+            return sc_ptr - 1;
+        }
+    }
 };
+/**
+ * @brief Recebe a posição relativa a pagina que deve ser retirada da mêmoria e a nova pagína que deve ser escrita na mèmoria principal, caso neste
+ * processo todas as páginas sejam "novas" na mêmoria, realizamos a troca de permissão destas para PROT_NONE. Em seguida retiramos a pagina desejada 
+ * da mêmoria e caso ela não possua permissão de escrita, salvamos ela através de vm_list_save_page no "manager" e em seguida inicializamos a nova 
+ * página no espaço da mêmoria principal
+ * 
+ * @param remove_pos  - Posição relativa na mêmoria ao frame que será retirado
+ * @param new_page - Pagina que irá ocupar o espaço de mêmoria da pagina removida
+ */
+void realloc_pages(int remove_pos,page new_page){
+    
+    page removed_page = frame.page_t[remove_pos]; 
+    short permission = removed_page.options.permission;
+
+    if(new_pages_counter >= frame.size){
+        for(int i = 0; i < frame.size; i++){
+            mmu_chprot(frame.page_t[i].pid,frame.page_t[i].vaddr,PROT_NONE);
+        }
+        new_pages_counter = 0;
+    }
+
+    mmu_nonresident(removed_page.pid,removed_page.vaddr);
+
+    if(permission == PROT_READ){
+        vm_list_save_page(manager,removed_page);
+    }
+
+    frame.page_t[remove_pos] = new_page;
+    mmu_zero_fill(remove_pos);
+    mmu_resident(new_page.pid,new_page.vaddr,remove_pos,new_page.options.permission);
+}
+
 
 //-------------------------- PAGER CORE --------------------------------------------------------------------------------
 
@@ -298,6 +381,8 @@ void pager_init(int nframes, int nblocks){
 
     frame.page_t = (page*) malloc(sizeof(page) * nframes);
     block.page_t = (page*) malloc(sizeof(page) * nblocks);
+    sc_ptr = 0;
+    new_pages_counter = 0;
 
     init_page_central(&frame);
     init_page_central(&block);
@@ -354,33 +439,47 @@ void* pager_extend(pid_t pid){
  * @param addr Endereço relativo ao processo que se quer acessar.
  */
 void pager_fault(pid_t pid, void *addr){
-    int frame_pos, block_pos;
-    int in_frame = check_page_allocation(&frame, pid, addr, &frame_pos);
-    int in_block = check_page_allocation(&block, pid, addr, &block_pos);
-    int exist = vm_list_check_extended_page(manager, pid, addr);
+    int frame_pos,block_pos;
+    int remove_pos;
+    short page_permission;
+    page new_page;
+
+    int in_frame = check_page_allocation(&frame,pid,addr,&frame_pos);
+    int in_block = check_page_allocation(&frame,pid,addr,&block_pos);
+    int exist = vm_list_check_extended_page(manager,pid,addr);
 
     if(!in_frame && !in_block){
         if(!exist){
             return;
         }
 
+        new_page.pid = pid;
+        new_page.vaddr = addr;
+        new_page.options.in_frame = 1;
+        new_page.options.permission = PROT_READ;
+        new_pages_counter++;
+        
         if(frame.free > 0){
             int alloc_pos = frame.size - frame.free;
-            frame.page_t[alloc_pos].vaddr = addr;
-            frame.page_t[alloc_pos].pid = pid;
-            frame.page_t[alloc_pos].options.in_frame = 1;
-            frame.page_t[alloc_pos].options.permission = PROT_READ;
+            frame.page_t[alloc_pos] = new_page;
             frame.free--;
             mmu_zero_fill(alloc_pos);
             mmu_resident(pid,addr,alloc_pos,PROT_READ);
         }
         else{
-            second_chance();
+            remove_pos = second_chance();
+            realloc_pages(remove_pos,new_page);
+            
         }
     }
     else if(in_frame){
-        frame.page_t[frame_pos].options.permission = PROT_READ | PROT_WRITE;
-        mmu_chprot(pid, addr, PROT_READ | PROT_WRITE);
+        if(frame.page_t[frame_pos].options.permission == PROT_NONE){
+            frame.page_t[frame_pos].options.permission = PROT_READ;
+        }
+        else if(frame.page_t[frame_pos].options.permission == PROT_READ){
+            frame.page_t[frame_pos].options.permission = PROT_WRITE | PROT_READ;
+        }
+        mmu_chprot(pid,addr,frame.page_t[frame_pos].options.permission);
     }
 }
 
