@@ -11,7 +11,7 @@
 #define NO_ALLOC 0
 
 
-#define VIRTUAL_ADDR_TO_INDEX(vaddr) (int) (((int)vaddr - UVM_BASEADDR)/PAGE_SIZE)
+#define VIRTUAL_ADDR_TO_INDEX(vaddr) (long) (((long) vaddr - UVM_BASEADDR) / PAGE_SIZE)
 #define INDEX_TO_VIRTUAL_ADDR(idx) (void*) (UVM_BASEADDR + (idx * PAGE_SIZE))
 
 //----------------------------- PAGE CENTRAL----------------------------------------------------------
@@ -398,8 +398,9 @@ void pager_fault(pid_t pid, void *addr){
  * @return int -1 - Quando não foi possível realizar a leitura. 0 - Quando foi possível realizar a leitura.
  */
 int pager_syslog(pid_t pid, void *addr, size_t len){
-    
-    if(addr < UVM_BASEADDR || addr > UVM_MAXADDR){
+    int addr_under_base = ((long) addr < UVM_BASEADDR);
+    int addr_above_max = ((long) addr > UVM_MAXADDR);
+    if(addr_under_base || addr_above_max){
         return -1;
     }
 
@@ -410,8 +411,8 @@ int pager_syslog(pid_t pid, void *addr, size_t len){
     }
 
     void* vaddr = INDEX_TO_VIRTUAL_ADDR(index);
-    unsigned char* buf = (unsigned char*) malloc(sizeof(unsigned char)*len);
-    buf = pmem + (index*PAGE_SIZE) + (addr - vaddr);
+    const char* buf = (char*) malloc(sizeof(char) * len);
+    buf = pmem + (index * PAGE_SIZE) + (addr - vaddr);
     for(int i = 0; i < len; i++){
         printf("%02x", (unsigned)buf[i]);
     }
@@ -420,7 +421,7 @@ int pager_syslog(pid_t pid, void *addr, size_t len){
 }
 
 /**
- * @brief Destrói todas as páginas relativas a um processo tanto na tabela de páginas da memória principal,
+ * @brief Destrói todas as páginas relativas a um processo, tanto na tabela de páginas da memória principal
  * quanto da secundária, removendo a memória virtual associada a ele ao final.
  * 
  * @param pid Identificador do processo que foi finalizado, tendo a memória desalocada.
