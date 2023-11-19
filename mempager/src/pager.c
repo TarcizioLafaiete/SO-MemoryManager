@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#include <pthread.h>
 
 #define PAGE_SIZE sysconf(_SC_PAGESIZE)
 #define NUM_PAGES (UVM_MAXADDR - UVM_BASEADDR + 1) / PAGE_SIZE
@@ -14,6 +15,11 @@
 #define VIRTUAL_ADDR_TO_INDEX(vaddr) (long) (((long) vaddr - UVM_BASEADDR) / PAGE_SIZE)
 #define INDEX_TO_VIRTUAL_ADDR(idx) (void*) (UVM_BASEADDR + (idx * PAGE_SIZE))
 
+/**
+ * @brief Mutex utilizado para evitar condições de corrida entre acessos de processos diferentes
+ * 
+ */
+pthread_mutex_t lock;
 //----------------------------- PAGE CENTRAL----------------------------------------------------------
 
 /**
@@ -112,6 +118,14 @@ int check_page_allocation(page_central* central, pid_t pid, void* vaddr, int* po
     }
     *pos = -1; 
     return 0;
+}
+
+void clean_page(page_central* central,int block_pos){
+    central->page_t[block_pos].pid = -1;
+    central->page_t[block_pos].vaddr = NO_ALLOC;
+    central->page_t[block_pos].options.in_frame = 0;
+    central->page_t[block_pos].options.permission = 0;
+    central->page_t[block_pos].options.reference_bit = 0;
 }
 
 //-------------------------- VIRTUAL MEMORY ---------------------------------------------------------------------
@@ -341,8 +355,9 @@ int second_chance(){
  * 
  * @param remove_pos  - Posição relativa na mêmoria ao frame que será retirado
  * @param new_page - Pagina que irá ocupar o espaço de mêmoria da pagina removida
+ * @param new_page_origin - Se 1 ela foi originada do disco, caso 0 sua origem é do "manager".
  */
-void realloc_pages(int remove_pos,page new_page){
+void realloc_pages(int remove_pos,page new_page,int new_page_origin, int block_pos){
     
     page removed_page = frame.page_t[remove_pos]; 
     short permission = removed_page.options.permission;
@@ -355,14 +370,27 @@ void realloc_pages(int remove_pos,page new_page){
     }
 
     mmu_nonresident(removed_page.pid,removed_page.vaddr);
+    removed_page.options.permission = PROT_READ;
 
     if(permission == PROT_READ){
         vm_list_save_page(manager,removed_page);
     }
 
+    else if(permission == PROT_WRITE | PROT_READ){
+        block.page_t[remove_pos] = removed_page;
+        mmu_disk_write(remove_pos,remove_pos);
+    }
+
     frame.page_t[remove_pos] = new_page;
-    mmu_zero_fill(remove_pos);
-    mmu_resident(new_page.pid,new_page.vaddr,remove_pos,new_page.options.permission);
+    if(new_page_origin == 1){
+        clean_page(&block,block_pos);
+        mmu_disk_read(block_pos,remove_pos);
+        mmu_resident(new_page.pid,new_page.vaddr,remove_pos,PROT_READ);   
+    }
+    else{
+        mmu_zero_fill(remove_pos);
+        mmu_resident(new_page.pid,new_page.vaddr,remove_pos,new_page.options.permission);
+    }
 }
 
 
@@ -396,7 +424,9 @@ void pager_init(int nframes, int nblocks){
  * @param pid Identificador do processo que se quer criar um paginador.
  */
 void pager_create(pid_t pid){
+    pthread_mutex_lock(&lock);
     vm_list_insert_pid(manager, pid);
+    pthread_mutex_unlock(&lock);
 }
 
 /**
@@ -410,13 +440,16 @@ void pager_create(pid_t pid){
  * @return void* Endereço virtual convertido com base na alocação da página.
  */
 void* pager_extend(pid_t pid){
+    pthread_mutex_lock(&lock);
     if(block.free == 0){
+        // pthread_mutex_unlock(&lock);
         return NULL;
     }
 
     block.free--;
-
-    return vm_list_increase_pages(manager, pid);
+    void* addr = vm_list_increase_pages(manager,pid);
+    // pthread_mutex_unlock(&lock);
+    return addr;
 }
 
 /**
@@ -431,9 +464,11 @@ void* pager_extend(pid_t pid){
  * de segunda chance, buscando um elemento da memória principal a ser movido para a secundária e, dessa forma, permitir ao programa a
  * utilização do atual endereço.
  * 
- * Quando o endereço acessado já está na memória principal, as permissões dele são alteradas para leitura e escrita.
+ * Quando o endereço acessado já está na memória principal, as permissões dele são alteradas gradualmente a cada acesso. Seguindo a ordem
+ * PROT_NONE -> PROT_READ -> PROT_READ | PROT_WRITE
  * 
- * Quando o endereço acessado já está na memória secundária, ...
+ * Quando o endereço acessado já está na memória secundária, executamos o algoritmo de segunda chance, buscando o elemento a ser removido. Em seguida
+ * transferimos a pagina do disco para o espaço de frame definido, e a pagina removida recebe seu devido tratamento.
  * 
  * @param pid Identificadro do processo ao qual será tratada a falha de página ao acessar o endereço, se necessário.
  * @param addr Endereço relativo ao processo que se quer acessar.
@@ -445,7 +480,7 @@ void pager_fault(pid_t pid, void *addr){
     page new_page;
 
     int in_frame = check_page_allocation(&frame,pid,addr,&frame_pos);
-    int in_block = check_page_allocation(&frame,pid,addr,&block_pos);
+    int in_block = check_page_allocation(&block,pid,addr,&block_pos);
     int exist = vm_list_check_extended_page(manager,pid,addr);
 
     if(!in_frame && !in_block){
@@ -468,7 +503,7 @@ void pager_fault(pid_t pid, void *addr){
         }
         else{
             remove_pos = second_chance();
-            realloc_pages(remove_pos,new_page);
+            realloc_pages(remove_pos,new_page,0,NULL);
             
         }
     }
@@ -480,6 +515,19 @@ void pager_fault(pid_t pid, void *addr){
             frame.page_t[frame_pos].options.permission = PROT_WRITE | PROT_READ;
         }
         mmu_chprot(pid,addr,frame.page_t[frame_pos].options.permission);
+    }
+
+    else if(in_block){
+        new_pages_counter++;
+        remove_pos = second_chance();
+        new_page = block.page_t[block_pos];
+        new_page.options.reference_bit = 1;
+        realloc_pages(remove_pos,new_page,1,block_pos);
+
+    }
+    else{
+        printf("F*deu geral, tem pagina na memoria e no disco AO MESMO TEMPO \n");  
+        return;
     }
 }
 
