@@ -543,7 +543,7 @@ void pager_fault(pid_t pid, void *addr){
  * endereço inicial até o tamanho total informado, sem verificação de permissão do processo em relação à região lida.
  * 
  * Para isso, verifica se o endereço que se quer acessar está dentro do intervalo de memória disponível, retornando "-1" caso negativo.
- * Após isso, obtém a instância de memória virtual relativa àquele aquele processo, verificando se o endereço solicitado já 
+ * Após isso, obtém a instância de memória virtual relativa àquele processo, verificando se o endereço solicitado já 
  * foi alocado.
  * 
  * @param pid Identificador do processo que contem o primeiro endereço, cujo conteúdo será exibido
