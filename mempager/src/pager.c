@@ -14,6 +14,7 @@
 
 #define VIRTUAL_ADDR_TO_INDEX(vaddr) (long) (((long) vaddr - UVM_BASEADDR) / PAGE_SIZE)
 #define INDEX_TO_VIRTUAL_ADDR(idx) (void*) (UVM_BASEADDR + (idx * PAGE_SIZE))
+#define NORM_VIRTUAL_ADDR(vaddr) INDEX_TO_VIRTUAL_ADDR(VIRTUAL_ADDR_TO_INDEX(vaddr))
 
 /**
  * @brief Mutex utilizado para evitar condições de corrida entre acessos de processos diferentes
@@ -321,9 +322,11 @@ void vm_list_remove_pid(vm_list* list, pid_t pid){
 
     struct vm_node* removeable = curr;
     prev->next = curr->next;
+    list->size--;
     free(removeable);
     
 }
+
 //------------------------------------ SENCOND CHANCE ALGORITHM --------------------------------------------------------
 /**
  * @brief Procura na tabela de paginas presentes na mémoria principal por algum frame que possui o bit de referência como 0 para ser a proxima vitima
@@ -416,6 +419,7 @@ void pager_init(int nframes, int nblocks){
     init_page_central(&block);
 
     manager = vm_list_create();
+    pthread_mutex_init(&lock,NULL);
 }
 
 /**
@@ -424,7 +428,7 @@ void pager_init(int nframes, int nblocks){
  * @param pid Identificador do processo que se quer criar um paginador.
  */
 void pager_create(pid_t pid){
-    pthread_mutex_lock(&lock);
+    pthread_mutex_trylock(&lock);
     vm_list_insert_pid(manager, pid);
     pthread_mutex_unlock(&lock);
 }
@@ -440,15 +444,15 @@ void pager_create(pid_t pid){
  * @return void* Endereço virtual convertido com base na alocação da página.
  */
 void* pager_extend(pid_t pid){
-    pthread_mutex_lock(&lock);
+    pthread_mutex_trylock(&lock);
     if(block.free == 0){
-        // pthread_mutex_unlock(&lock);
+        pthread_mutex_unlock(&lock);
         return NULL;
     }
 
     block.free--;
     void* addr = vm_list_increase_pages(manager,pid);
-    // pthread_mutex_unlock(&lock);
+    pthread_mutex_unlock(&lock);
     return addr;
 }
 
@@ -474,17 +478,19 @@ void* pager_extend(pid_t pid){
  * @param addr Endereço relativo ao processo que se quer acessar.
  */
 void pager_fault(pid_t pid, void *addr){
+    pthread_mutex_trylock(&lock);
     int frame_pos,block_pos;
     int remove_pos;
     short page_permission;
     page new_page;
-
+    
+    addr = NORM_VIRTUAL_ADDR(addr);
     int in_frame = check_page_allocation(&frame,pid,addr,&frame_pos);
     int in_block = check_page_allocation(&block,pid,addr,&block_pos);
     int exist = vm_list_check_extended_page(manager,pid,addr);
-
     if(!in_frame && !in_block){
         if(!exist){
+            pthread_mutex_unlock(&lock);
             return;
         }
 
@@ -527,8 +533,9 @@ void pager_fault(pid_t pid, void *addr){
     }
     else{
         printf("F*deu geral, tem pagina na memoria e no disco AO MESMO TEMPO \n");  
-        return;
+        exit(EXIT_FAILURE);
     }
+    pthread_mutex_unlock(&lock);
 }
 
 /**
@@ -545,15 +552,18 @@ void pager_fault(pid_t pid, void *addr){
  * @return int -1 - Quando não foi possível realizar a leitura. 0 - Quando foi possível realizar a leitura.
  */
 int pager_syslog(pid_t pid, void *addr, size_t len){
+    pthread_mutex_trylock(&lock);
     int addr_under_base = ((long) addr < UVM_BASEADDR);
     int addr_above_max = ((long) addr > UVM_MAXADDR);
     if(addr_under_base || addr_above_max){
+        pthread_mutex_unlock(&lock);
         return -1;
     }
 
     int index = VIRTUAL_ADDR_TO_INDEX(addr);
     virtual_memory mem = vm_list_get(manager, pid);
     if(index > mem.page_ptr){
+        pthread_mutex_unlock(&lock);
         return -1;
     }
 
@@ -564,6 +574,7 @@ int pager_syslog(pid_t pid, void *addr, size_t len){
         printf("%02x", (unsigned)buf[i]);
     }
     printf("\n");
+    pthread_mutex_unlock(&lock);
     return 0;
 }
 
@@ -575,6 +586,7 @@ int pager_syslog(pid_t pid, void *addr, size_t len){
  */
 void pager_destroy(pid_t pid){
 
+    pthread_mutex_trylock(&lock);
     for(int i = 0; i < frame.size; i++){
         if(frame.page_t[i].pid == pid){
             frame.page_t[i].pid = -1;
@@ -596,4 +608,5 @@ void pager_destroy(pid_t pid){
     }
 
     vm_list_remove_pid(manager,pid);
+    pthread_mutex_unlock(&lock);
 }
