@@ -31,7 +31,7 @@ pthread_mutex_t lock;
  * 
  */
 typedef struct{
-    short in_frame;
+    short write_op;
     short permission;
     short reference_bit;
 } bits_array;
@@ -78,12 +78,6 @@ page_central block;
  */
 int sc_ptr;
 /**
- * @brief Contador de páginas novas, na mêmoria, toda vez que uma nova pagina entra na mêmoria principal ele é incrementado, toda vez que ele chega
- * no tamanho da mêmoria principal ele é zerado, e indica que deve acontecer um processo de troca de permissão das páginas para PROT_NONE
- * 
- */
-int new_pages_counter;
-/**
  * @brief Inicializa as páginas presentes em "page_t" com valores iniciais quaisquer
  * 
  * @param central A tabela de páginas que se quer inicializar
@@ -92,7 +86,7 @@ void init_page_central(page_central *central){
     for(int i = 0 ;i < central->size; i++){
         central->page_t[i].pid = -1;
         central->page_t[i].vaddr = NO_ALLOC;
-        central->page_t[i].options.in_frame = 0;
+        central->page_t[i].options.write_op = 0;
         central->page_t[i].options.permission = PROT_NONE;
     }
 }
@@ -124,7 +118,7 @@ int check_page_allocation(page_central* central, pid_t pid, void* vaddr, int* po
 void clean_page(page_central* central,int block_pos){
     central->page_t[block_pos].pid = -1;
     central->page_t[block_pos].vaddr = NO_ALLOC;
-    central->page_t[block_pos].options.in_frame = 0;
+    central->page_t[block_pos].options.write_op = 0;
     central->page_t[block_pos].options.permission = 0;
     central->page_t[block_pos].options.reference_bit = 0;
 }
@@ -256,6 +250,8 @@ virtual_memory vm_list_get(vm_list* list, pid_t pid){
     return curr == NULL ? list->head->data : curr->data;
 }
 
+
+
 /**
  * @brief Verifica se a memória virtual relativa ao processo informado, possui o endereço recebido por parâmetro solicitado 
  * para alocação de página.
@@ -273,12 +269,13 @@ int vm_list_check_extended_page(vm_list* list, pid_t pid, void* vaddr){
     }
     int alloc = VIRTUAL_ADDR_TO_INDEX(vaddr);
     int alloced = curr->data.pages[alloc] & 0x03;
-    if(alloced == 1){
-        curr->data.pages[alloc] |= 0x02;
+    if(alloced){
+        // curr->data.pages[alloc] |= 0x02;
         return 1;
     }
     return 0;
 }
+
 /**
  * @brief Recebe uma página de mêmoria e salva seus dados no gerenciador "manager". Salvo a permissão de page nos bits 3 e 4 do inteiro respectivo
  * aquela pagina
@@ -341,6 +338,8 @@ int second_chance(){
         }
 
         if(frame.page_t[sc_ptr].options.reference_bit){
+            mmu_chprot(frame.page_t[sc_ptr].pid,frame.page_t[sc_ptr].vaddr,PROT_NONE);
+            frame.page_t[sc_ptr].options.permission = PROT_NONE;
             frame.page_t[sc_ptr].options.reference_bit = 0;
             sc_ptr++;
         }
@@ -363,23 +362,14 @@ int second_chance(){
 void realloc_pages(int remove_pos,page new_page,int new_page_origin, int block_pos){
     
     page removed_page = frame.page_t[remove_pos]; 
-    short permission = removed_page.options.permission;
-
-    if(new_pages_counter >= frame.size){
-        for(int i = 0; i < frame.size; i++){
-            mmu_chprot(frame.page_t[i].pid,frame.page_t[i].vaddr,PROT_NONE);
-        }
-        new_pages_counter = 0;
-    }
 
     mmu_nonresident(removed_page.pid,removed_page.vaddr);
     removed_page.options.permission = PROT_READ;
 
-    if(permission == PROT_READ){
+    if(removed_page.options.write_op == 0){
         vm_list_save_page(manager,removed_page);
     }
-
-    else if(permission == PROT_WRITE | PROT_READ){
+    else{
         block.page_t[remove_pos] = removed_page;
         mmu_disk_write(remove_pos,remove_pos);
     }
@@ -413,7 +403,7 @@ void pager_init(int nframes, int nblocks){
     frame.page_t = (page*) malloc(sizeof(page) * nframes);
     block.page_t = (page*) malloc(sizeof(page) * nblocks);
     sc_ptr = 0;
-    new_pages_counter = 0;
+
 
     init_page_central(&frame);
     init_page_central(&block);
@@ -488,6 +478,9 @@ void pager_fault(pid_t pid, void *addr){
     int in_frame = check_page_allocation(&frame,pid,addr,&frame_pos);
     int in_block = check_page_allocation(&block,pid,addr,&block_pos);
     int exist = vm_list_check_extended_page(manager,pid,addr);
+    // printf("in_frame; %d, in_block: %d, exist: %d \n",in_frame,in_block,exist);
+
+
     if(!in_frame && !in_block){
         if(!exist){
             pthread_mutex_unlock(&lock);
@@ -496,9 +489,8 @@ void pager_fault(pid_t pid, void *addr){
 
         new_page.pid = pid;
         new_page.vaddr = addr;
-        new_page.options.in_frame = 1;
+        new_page.options.write_op = 0;
         new_page.options.permission = PROT_READ;
-        new_pages_counter++;
         
         if(frame.free > 0){
             int alloc_pos = frame.size - frame.free;
@@ -518,13 +510,14 @@ void pager_fault(pid_t pid, void *addr){
             frame.page_t[frame_pos].options.permission = PROT_READ;
         }
         else if(frame.page_t[frame_pos].options.permission == PROT_READ){
+            frame.page_t[frame_pos].options.write_op = 1;
             frame.page_t[frame_pos].options.permission = PROT_WRITE | PROT_READ;
         }
+        new_page.options.reference_bit = 1;
         mmu_chprot(pid,addr,frame.page_t[frame_pos].options.permission);
     }
 
     else if(in_block){
-        new_pages_counter++;
         remove_pos = second_chance();
         new_page = block.page_t[block_pos];
         new_page.options.reference_bit = 1;
@@ -559,7 +552,6 @@ int pager_syslog(pid_t pid, void *addr, size_t len){
         pthread_mutex_unlock(&lock);
         return -1;
     }
-
     int index = VIRTUAL_ADDR_TO_INDEX(addr);
     virtual_memory mem = vm_list_get(manager, pid);
     if(index > mem.page_ptr){
@@ -592,7 +584,7 @@ void pager_destroy(pid_t pid){
             frame.page_t[i].pid = -1;
             frame.page_t[i].vaddr = NO_ALLOC;
             frame.page_t[i].options.permission = 0;
-            frame.page_t[i].options.in_frame = 0;
+            frame.page_t[i].options.write_op = 0;
             frame.free++;
         }
     }
@@ -602,7 +594,7 @@ void pager_destroy(pid_t pid){
             block.page_t[i].pid = -1;
             block.page_t[i].vaddr = NO_ALLOC;
             block.page_t[i].options.permission = 0;
-            block.page_t[i].options.in_frame = 0;
+            block.page_t[i].options.write_op = 0;
             block.free++;
         }
     }
