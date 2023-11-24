@@ -5,8 +5,9 @@ Ao entregar este documento preenchido, os membros do grupo afirmam que todo o c�
 
 ## Membros do grupo e alocação de esforço
 Preencha as linhas abaixo com o nome e o email dos integrantes do grupo.  Substitua marcadores `XX` pela contribuição de cada membro do grupo no desenvolvimento do trabalho (os valores devem somar 100%).
-- Nome1 <email1> XX%
-- Nome2 <email2> XX%
+- Gabriel Bifano Freddi < gabrielfev@outlook.com > 33%
+- Pedro de Oliveira Guedes < pedro.og2002@gmail.com > 33%
+- Tarcizio Augusto Santos Lafaiete < tarcizio-augusto@hotmail.com > 34%
 
 ## Referências bibliográficas
 
