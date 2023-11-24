@@ -36,11 +36,27 @@ A seguir, cada uma das estruturas de dados será listada, descrita e terá o pro
         - **`check_page_allocation`:** Verifica se uma página de memória específica (alocada por processo com determinado PID e com determinado endereço inicial) está presente na tabela informada.
         - **`clean_page`:** Desaloca uma página na tabela, deixando a posição livre para que outros processos possam alocar uma nova página.
 
-- **virtual_memory**
-    - **Descrição:** aaaa
-    - **Justificativa:** aaaa
+- **`virtual_memory`**
+    - **Descrição:** Essa estrutura representa a memória virtual de um processo, que contem as páginas cuja alocação foi solicitada por aquele processo. Ou seja, essa estrutura atua como um intermediário entre a solicitação de páginas e a real alocação delas, de forma que a página somente será realmente alocada quando o usuário ativamente utilizá-la.
+    - **Justificativa:** Essa estrutura é utilizada para gerenciar as diversas solicitações de alocação de páginas pelos diversos programas, evitando que ocorram falhas de página (`page_fault`) nos acessos durante a execução dos programas.
 
-- **bits_array**
+- **`struct vm_node`**
+    - **Descrição:** Célula de uma lista **unicamente encadeada**, armazenando as memórias virtuais dos processos.
+    - **Justificativa:** A decisão de implementação do gerenciador de páginas dos processos foi de implementar uma lista unicamente encadeada, dessa forma, foi necessário criar uma estrutura que armazenasse a memória virtual e apontasse a próxima estrutura da cadeia.
+
+- **`vm_list`**
+    - **Descrição:** Lista encadeada contendo as memórias virtuais associadas aos diversos processos em execução. Na implementação feita pelo grupo, a célula `head` é inutilizada, servindo como um valor de retorno padrão quando o objetivo de alguma função não é cumprido. Cada memória virtual de processo possui 1.024 páginas.
+    - **Justificativa:** A implementação de uma lista encadeada própria do grupo permite maior flexibilidade nas funções, que podem funcionar de forma simplificada.
+    - **Funções associadas:** Essa estrutura possui sete funções para coordenar a criação, acesso e remoção de itens dela, garantindo que ela seja utilizada da forma esperada e adicionando maior nível de abstração às operações do sistema.
+        - **`vm_list_create`:** Cria a lista encadeada de memórias virtuais, atribuindo valores inválidos padrão à célula `head`.
+        - **`vm_list_insert_pid`:** Cria uma nova instância de memória virtual para o processo solicitante, inicializando-a com valores padrão e adicionando ao final da lista encadeada recebida como parâmetro.
+        - **`vm_list_increase_pages`:** Solicita a alocação de uma nova página para um processo. Para isso, percorre a lista encadeada buscando pela memória virtual relativa ao processo, quando ela é encontrada, o ponteiro para a última posição alocada é incrementado e o endereço virtual relativo àquela posição é retornado.
+        - **`vm_list_get`:** Busca a instância de memória virtual relativa ao processo alvo e, caso ela exista, ela é retornada, caso contrário, a célula `head` da lista de memórias é retornada como um valor padrão.
+        - **`vm_list_check_extended_page`:** Verifica se a memória virtual relativa ao processo alvo possui uma solicitação de alocação de página com o endereço virtual recebido.
+        - **`vm_list_save_page`:** Recebe uma página de memória e a salva na memória virtual do processo alvo, realizando operações *bitwise* para demonstrar a ocupação.
+        - **`vm_list_remove_pid`:** Remove a memória virtual associada ao processo alvo, indicando a finalização da execução do mesmo.
+
+- **Algoritmo de segunda chance**
     - **Descrição:** aaaa
     - **Justificativa:** aaaa
 
