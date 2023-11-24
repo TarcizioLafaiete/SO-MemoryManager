@@ -16,6 +16,8 @@ Ao longo desta seção, serão discutidos detalhes de implementação, buscando 
 Grande parte das estruturas de dados utilizadas para o desenvolvimento do trabalho foram confeccionadas pelo grupo, para que, dessa forma, fosse possível ter mais controle sobre o funcionamento e integrações do código. 
 
 A seguir, cada uma das estruturas de dados será listada, descrita e terá o propósito justificado.
+
+#### Tabela de páginas
 - **`bits_array`**
     - **Descrição:** Estrutura de dados com informações da página, como se está presente na memória física e se permite leitura e/ou escrita.
     - **Justificativa:** Essa estrutura garante a integridade de acesso às páginas pelo paginador, além de guardar a informação `reference_bit`, que é utilizada pelo algoritmo de segunda chance ao selecionar as páginas que irão para o disco.
@@ -32,6 +34,7 @@ A seguir, cada uma das estruturas de dados será listada, descrita e terá o pro
         - **`check_page_allocation`:** Verifica se uma página de memória específica (alocada por processo com determinado PID e com determinado endereço inicial) está presente na tabela informada.
         - **`clean_page`:** Desaloca uma página na tabela, deixando a posição livre para que outros processos possam alocar uma nova página.
 
+#### Memória virtual
 - **`virtual_memory`**
     - **Descrição:** Essa estrutura representa a memória virtual de um processo, que contem as páginas cuja alocação foi solicitada por aquele processo. Ou seja, essa estrutura atua como um intermediário entre a solicitação de páginas e a real alocação delas, de forma que a página somente será realmente alocada quando o usuário ativamente utilizá-la.
     - **Justificativa:** Essa estrutura é utilizada para gerenciar as diversas solicitações de alocação de páginas pelos diversos programas, evitando que ocorram falhas de página (`page_fault`) nos acessos durante a execução dos programas.
@@ -52,12 +55,19 @@ A seguir, cada uma das estruturas de dados será listada, descrita e terá o pro
         - **`vm_list_save_page`:** Recebe uma página de memória e a salva na memória virtual do processo alvo, realizando operações *bitwise* para demonstrar a ocupação.
         - **`vm_list_remove_pid`:** Remove a memória virtual associada ao processo alvo, indicando a finalização da execução do mesmo.
 
-- **Política de reposição de páginas**
-    - **Descrição:** Quando a memória principal está cheia e um processo necessita alocar mais memória, as páginas da memória RAM são enviadas à memória secundária para disponibilizar espaço para a continuação do funcionamento dos programas. Para selecionar quais páginas da memória principal devem ser enviadas a secundária, é utilizado o *Algoritmo de segunda chance*.
-    - **Justificativa:** O algoritmo de segunda chance foi implementado pelo grupo por ser o especificado como necessário na descrição do trabalho prático.
-    - **Funções associadas:** Para o funcionamento completo da política de reposição de páginas, foram implementadas duas funções, que serão discutidas a seguir.
-        - **`second_chance`:** Essa função é o algoritmo de segunda chance em si, que itera pelas páginas alocadas na memória principal, buscando uma que possua o bit de referência igual a 0, indicando que aquela página pode ser movida para a memória secundária.
-        - **`realloc_pages`:** Remove uma página presente na posição informada da memória principal, enviando-a para a memória secundária e substituindo-a por uma nova página recebida.
+#### Política de reposição de páginas
+Quando a memória principal está cheia e um processo necessita alocar mais memória, as páginas da memória RAM são enviadas à memória secundária para disponibilizar espaço para a continuação do funcionamento dos programas. Para selecionar quais páginas da memória principal devem ser enviadas a secundária, é utilizado o *Algoritmo de segunda chance*.
+
+O algoritmo de segunda chance foi implementado pelo grupo por ser o especificado como necessário na descrição do trabalho prático.
+
+
+Para o funcionamento completo da política de reposição de páginas, foram implementadas duas funções, que serão discutidas a seguir.
+
+- **`second_chance`:** Essa função é o algoritmo de segunda chance em si, que itera pelas páginas alocadas na memória principal, buscando uma que possua o bit de referência igual a 0, indicando que aquela página pode ser movida para a memória secundária.
+
+- **`realloc_pages`:** Remove uma página presente na posição informada da memória principal, enviando-a para a memória secundária e substituindo-a por uma nova página recebida.
+
+---
 
 As demais funções implementadas no arquivo `pager.c` já tiveram as funcionalidades esperadas, objetivos e justificativas amplamente discutidas na especificação do presente trabalho, portanto, não serão mencionadas no decorrer deste documento. Caso seja necessário um entendimento melhor sobre as mesmas, todas possuem comentários extensos escritos diretamente no arquivo de implementação.
 
