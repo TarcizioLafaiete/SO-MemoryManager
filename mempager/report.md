@@ -9,10 +9,6 @@ Preencha as linhas abaixo com o nome e o email dos integrantes do grupo.  Substi
 - Pedro de Oliveira Guedes \<pedro.og2002@gmail.com\> 33%
 - Tarcizio Augusto Santos Lafaiete \<tarcizio-augusto@hotmail.com\> 34%
 
-## Referências bibliográficas
-Os seguintes recursos foram utilizados para o desenvolvimento deste trabalho:
-- < Nome do site >. Disponível em: \<link do site\>
-
 ## Detalhes de implementação
 Ao longo desta seção, serão discutidos detalhes de implementação, buscando tornar a compreensão do código e sua confecção mais acessível a todos. Além das informações presentes neste documento, as funções e estruturas de dados também foram amplamente documentadas ao longo do arquivo `pager.c`.
 
@@ -56,11 +52,18 @@ A seguir, cada uma das estruturas de dados será listada, descrita e terá o pro
         - **`vm_list_save_page`:** Recebe uma página de memória e a salva na memória virtual do processo alvo, realizando operações *bitwise* para demonstrar a ocupação.
         - **`vm_list_remove_pid`:** Remove a memória virtual associada ao processo alvo, indicando a finalização da execução do mesmo.
 
-- **Algoritmo de segunda chance**
-    - **Descrição:** aaaa
-    - **Justificativa:** aaaa
+- **Política de reposição de páginas**
+    - **Descrição:** Quando a memória principal está cheia e um processo necessita alocar mais memória, as páginas da memória RAM são enviadas à memória secundária para disponibilizar espaço para a continuação do funcionamento dos programas. Para selecionar quais páginas da memória principal devem ser enviadas a secundária, é utilizado o *Algoritmo de segunda chance*.
+    - **Justificativa:** O algoritmo de segunda chance foi implementado pelo grupo por ser o especificado como necessário na descrição do trabalho prático.
+    - **Funções associadas:** Para o funcionamento completo da política de reposição de páginas, foram implementadas duas funções, que serão discutidas a seguir.
+        - **`second_chance`:** Essa função é o algoritmo de segunda chance em si, que itera pelas páginas alocadas na memória principal, buscando uma que possua o bit de referência igual a 0, indicando que aquela página pode ser movida para a memória secundária.
+        - **`realloc_pages`:** Remove uma página presente na posição informada da memória principal, enviando-a para a memória secundária e substituindo-a por uma nova página recebida.
 
-Descreva e justifique as estruturas de dados utilizadas em sua solução.
+As demais funções implementadas no arquivo `pager.c` já tiveram as funcionalidades esperadas, objetivos e justificativas amplamente discutidas na especificação do presente trabalho, portanto, não serão mencionadas no decorrer deste documento. Caso seja necessário um entendimento melhor sobre as mesmas, todas possuem comentários extensos escritos diretamente no arquivo de implementação.
 
 ### Mecanismo de controle de acesso e modificação das páginas
 Descreva o mecanismo utilizado para controle de acesso e modificação às páginas.
+
+## Referências bibliográficas
+Os seguintes recursos foram utilizados para o desenvolvimento deste trabalho:
+- < Nome do site >. Disponível em: \<link do site\>
