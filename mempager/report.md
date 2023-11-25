@@ -72,7 +72,17 @@ Para o funcionamento completo da política de reposição de páginas, foram imp
 As demais funções implementadas no arquivo `pager.c` já tiveram as funcionalidades esperadas, objetivos e justificativas amplamente discutidas na especificação do presente trabalho, portanto, não serão mencionadas no decorrer deste documento. Caso seja necessário um entendimento melhor sobre as mesmas, todas possuem comentários extensos escritos diretamente no arquivo de implementação.
 
 ### Mecanismo de controle de acesso e modificação das páginas
-Descreva o mecanismo utilizado para controle de acesso e modificação às páginas.
+O acesso e modificação de páginas é controlado em dois aspectos diferentes, o primeiro é quanto a concorrência das diversas threads nos acessos à memória, o segundo é quanto às permissões que cada página apresenta para leitura e modificação. Como a especificação do trabalho prático não é direta quanto a qual delas deve ser abordada nesta seção, ambas serão descritas em subtítulos abaixo.
+
+#### Acesso concorrente
+Como grande parte dos Sistemas Operacionais contemporâneos operam em ambientes *multithread*, é necessário que exista algum mecanismo para controlar o acesso e modificação concorrente das páginas, evitando que ocorram conflitos.
+
+Para solucionar este problema, foi utilizado um Mutex da biblioteca `pthread`, que bloqueia o acesso à memória sempre que uma função do paginador é invocada, liberando-a antes de retornar ao final.
+
+#### Controle de permissão das páginas
+O controle de permissão das páginas é coordenado pela estrutura `bits_array`, que foi descrita anteriormente. Essa estrutura armazena variáveis que indicam o estado das opções da página no instante de acesso, armazenando as variáveis `write_op`, `permission` e `reference_bit`.
+
+A variável `permission` em específico armazena os valores de permissão definidos no módulo `<sys/mman.h>`.
 
 ## Referências bibliográficas
 Os seguintes recursos foram utilizados para o desenvolvimento deste trabalho:
