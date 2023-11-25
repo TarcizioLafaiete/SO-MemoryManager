@@ -63,9 +63,9 @@ O algoritmo de segunda chance foi implementado pelo grupo por ser o especificado
 
 Para o funcionamento completo da política de reposição de páginas, foram implementadas duas funções, que serão discutidas a seguir.
 
-- **`second_chance`:** Essa função é o algoritmo de segunda chance em si, que itera pelas páginas alocadas na memória principal, buscando uma que possua o bit de referência igual a 0, indicando que aquela página pode ser movida para a memória secundária.
+- **`second_chance`:** Essa função é o algoritmo de segunda chance em si, que itera pelas páginas alocadas na memória principal, buscando uma que possua o bit de referência igual a 0, indicando que aquela página será a escolhida para ser retirada da mémoria principal. Nos casos em que o reference_bit for igual a 1, comuta este para zero e retira da página as permissões de escrita e leitura, colocando ela em PROT_NONE.
 
-- **`realloc_pages`:** Remove uma página presente na posição informada da memória principal, enviando-a para a memória secundária e substituindo-a por uma nova página recebida.
+- **`realloc_pages`:** Remove uma página presente na posição informada da memória principal, e em casos em que já ocorreu  escrita da página, enviando-a para a memória secundária e substituindo-a por uma nova página alocada, ou uma que está contida no disco.
 
 ---
 
@@ -83,7 +83,11 @@ Para solucionar este problema, foi utilizado um Mutex da biblioteca `pthread`, q
 O controle de permissão das páginas é coordenado pela estrutura `bits_array`, que foi descrita anteriormente. Essa estrutura armazena variáveis que indicam o estado das opções da página no instante de acesso, armazenando as variáveis `write_op`, `permission` e `reference_bit`.
 
 A variável `permission` em específico armazena os valores de permissão definidos no módulo `<sys/mman.h>`.
+A variável `write_op` indica se esta página já passou por algum processo de escrita, isto é fundamental para o processo de realocação de páginas pois, caso o write_op seja igual 1 então a necessidade de guardar este processo em disco para preservar seus dados, caso ele não tenha sido escrito ainda, pode-se desaloca-lo sem a necessidade de salvar seus dados.
+Por fim, o `reference_bit` é parte essencial do algoritmo de segunda chance, sendo que ele é o bit observado no programa para dar ou não a segunda chance ao processo na mémoria, ele é habilitado como 1 toda vez que há um novo acesso aquela página e se torna 0 quando o algoritmo permite a ele uma segunda chance.
 
 ## Referências bibliográficas
 Os seguintes recursos foram utilizados para o desenvolvimento deste trabalho:
-- < Nome do site >. Disponível em: \<link do site\>
+- < Github - Repositório de Sitaras>. Disponível em: \<https://github.com/Sitaras/os-memory-simulator/blob/master/replacement_algorithms/replacement_algorithms.c\>
+- < Educative.io >. Disponível em: \<https://www.educative.io/answers/what-is-the-second-chance-algorithm\>
+- < IBM >. Disponível em: \<https://www.ibm.com/docs/pt-br/aix/7.3?topic=programming-using-mutexes\>
