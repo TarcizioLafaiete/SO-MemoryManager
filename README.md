@@ -87,6 +87,11 @@ O controle de permissão das páginas é coordenado pela estrutura `bits_array`,
 
 A variável `permission` em específico armazena os valores de permissão definidos no módulo `<sys/mman.h>`.
 
+A variável `write_op` indica se esta página já passou por algum processo de escrita, isto é fundamental para o processo de realocação de páginas pois, caso o write_op seja igual 1 então a necessidade de guardar este processo em disco para preservar seus dados, caso ele não tenha sido escrito ainda, pode-se desaloca-lo sem a necessidade de salvar seus dados.
+
+Por fim, o `reference_bit` é parte essencial do algoritmo de segunda chance, sendo que ele é o bit observado no programa para dar ou não a segunda chance ao processo na mémoria, ele é habilitado como 1 toda vez que há um novo acesso aquela página e se torna 0 quando o algoritmo permite a ele uma segunda chance.
+
 ## Referências bibliográficas
 Os seguintes recursos foram utilizados para o desenvolvimento deste trabalho:
-- < Nome do site >. Disponível em: \<link do site\>
+- < Educative.io >. Disponível em: \<https://www.educative.io/answers/what-is-the-second-chance-algorithm\>
+- < IBM >. Disponível em: \<https://www.ibm.com/docs/pt-br/aix/7.3?topic=programming-using-mutexes\>
