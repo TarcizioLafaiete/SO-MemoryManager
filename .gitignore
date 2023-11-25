@@ -1,8 +1,10 @@
 #Ignore .out
-.out
+*.out
 #Ignore static libraries
-.a
+*.a
 #Ignore logs
-.log*
+*.log*
 #Ignore .vscode
-.vscode
+.vscode/
+#Ignore bin if its there
+bin/
