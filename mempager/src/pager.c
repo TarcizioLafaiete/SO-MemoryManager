@@ -24,9 +24,9 @@ pthread_mutex_t lock;
 //----------------------------- PAGE CENTRAL----------------------------------------------------------
 
 /**
- * @brief Estrutura utilizada para guardar informações úteis para o algoritmo de segunda chance.
- * @param in_frame Define se a página está presente na memória física
- * @param permission Define se a página permite leitura e/ou escrita por parte dos processos.
+ * @brief Estrutura utilizada para guardar os bits de informações de acesso da página, sendo úteis para o algoritmo de segunda chance.
+ * @param write_op Indica se já ocorreu uma operação de escrita na página no passado,
+ * @param permission Armazena as permissões atuais da página, indicando se é possível ler e escrever nela, por exemplo.
  * @param reference_bit Bit utilizado no algoritmo de segunda chance para definir a pagina retirada da mêmoria.
  * 
  */
